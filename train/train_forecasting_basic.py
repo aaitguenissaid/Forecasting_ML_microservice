@@ -4,6 +4,9 @@ import kaggle
 import pandas as pd
 from prophet import Prophet
 import matplotlib.pyplot as plt
+from pathlib import Path
+
+import mlflow
 
 # config kaggle json and download the dataset.
 def download_kaggle_dataset(kaggle_dataset: str = "pratyushakar/rossmann-store-sales") -> None:
@@ -35,7 +38,7 @@ def train_predict(df: pd.DataFrame, train_fraction: float, seasonality: dict) ->
     
     return predicted, df_train, df_test, train_index
 
-def plot_forecast(df_train: pd.DataFrame, df_test: pd.DataFrame, predicted: pd.DataFrame, train_index: int) -> None:
+def plot_forecast(df_train: pd.DataFrame, df_test: pd.DataFrame, predicted: pd.DataFrame, train_index: int, results_path: str) -> None:
     fig, ax = plt.subplots(figsize=(20, 10))
     df_test.plot(
         x="ds",
@@ -74,17 +77,26 @@ def plot_forecast(df_train: pd.DataFrame, df_test: pd.DataFrame, predicted: pd.D
         marker="o",
     )
     
-    current_ytick_values = plt.gca().get_yticks()
-    plt.gca().set_yticklabels(["{:,.0f}".format(x) for x in current_ytick_values])
+    yticks = plt.gca().get_yticks()
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(["{:,.0f}".format(x) for x in yticks])
     ax.set_xlabel("Date")
     ax.set_ylabel("Sales")
     plt.tight_layout()
-    plt.savefig("store_data_forecast.png")
+    plt.savefig(os.path.join(results_path, "store_data_forecast.png"))
 
 def main():
+
+    mlflow.set_tracking_uri("http://127.0.0.1:5000")
+    mlflow.set_experiment("prophet_models_04042025")
+    mlflow.autolog()
+
+    results_path = "./results/"
+    Path(results_path).mkdir(exist_ok=True)
     data_path = "./data/"
     train_file = "train.csv"
     file_path = os.path.join(data_path, train_file)
+
     if os.path.exists(file_path):
         logging.info("Dataset already exists!")
     else:
@@ -100,9 +112,10 @@ def main():
         "daily": False,
     }
 
-    predicted, df_train, df_test, train_index = train_predict(df = df, train_fraction = 0.8, seasonality = seasonality)
+    with mlflow.start_run():
+        predicted, df_train, df_test, train_index = train_predict(df = df, train_fraction = 0.8, seasonality = seasonality)
 
-    plot_forecast(df_train, df_test, predicted, train_index)
+    plot_forecast(df_train, df_test, predicted, train_index, results_path)
 
 
 if __name__ == "__main__":
