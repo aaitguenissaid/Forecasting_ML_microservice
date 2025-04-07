@@ -2,11 +2,13 @@ import os
 import logging
 import kaggle
 import pandas as pd
-from prophet import Prophet
+from prophet import Prophet, serialize
 import matplotlib.pyplot as plt
 from pathlib import Path
+from prophet.diagnostics import cross_validation, performance_metrics
 
 import mlflow
+from mlflow.models import infer_signature
 
 # config kaggle json and download the dataset.
 def download_kaggle_dataset(kaggle_dataset: str = "pratyushakar/rossmann-store-sales") -> None:
@@ -21,22 +23,12 @@ def prep_store_data(df: pd.DataFrame, store_id: int = 4, store_open: int = 1) ->
     ].reset_index(drop=True)
     return df_store.sort_values("ds", ascending=True)
 
-def train_predict(df: pd.DataFrame, train_fraction: float, seasonality: dict) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+def train_test_split(df: pd.DataFrame, train_fraction: float) -> tuple[pd.DataFrame, pd.DataFrame, int]:
     train_index = int(train_fraction*df.shape[0])
     df_train = df.copy().iloc[0:train_index]
     df_test = df.copy().iloc[train_index:]
+    return df_train, df_test, train_index
 
-    model = Prophet(
-        yearly_seasonality = seasonality["yearly"],
-        weekly_seasonality = seasonality["weekly"],
-        daily_seasonality = seasonality["daily"],
-        interval_width = 0.95
-    )
-
-    model.fit(df_train)
-    predicted = model.predict(df_test)
-    
-    return predicted, df_train, df_test, train_index
 
 def plot_forecast(df_train: pd.DataFrame, df_test: pd.DataFrame, predicted: pd.DataFrame, train_index: int, results_path: str) -> None:
     fig, ax = plt.subplots(figsize=(20, 10))
@@ -85,11 +77,14 @@ def plot_forecast(df_train: pd.DataFrame, df_test: pd.DataFrame, predicted: pd.D
     plt.tight_layout()
     plt.savefig(os.path.join(results_path, "store_data_forecast.png"))
 
+def extract_params(pr_model):
+    return {attr: getattr(pr_model, attr) for attr in serialize.SIMPLE_ATTRIBUTES}
+
 def main():
 
     mlflow.set_tracking_uri("http://127.0.0.1:5000")
     mlflow.set_experiment("prophet_models_04042025")
-    mlflow.autolog()
+    # mlflow.autolog()
 
     results_path = "./results/"
     Path(results_path).mkdir(exist_ok=True)
@@ -111,11 +106,46 @@ def main():
         "weekly": True,
         "daily": False,
     }
+    ARTIFACT_PATH = "model"
 
     with mlflow.start_run():
-        predicted, df_train, df_test, train_index = train_predict(df = df, train_fraction = 0.8, seasonality = seasonality)
+        df_train, df_test, train_index = train_test_split(df, train_fraction=0.8)
+        
+        print(f"Data range: {df_train['ds'].min()} -> {df_train['ds'].max()}")
+        print(f"Total days: {(df_train['ds'].max() - df_train['ds'].min()).days}")
+        
+        model = Prophet(
+            yearly_seasonality = seasonality["yearly"],
+            weekly_seasonality = seasonality["weekly"],
+            daily_seasonality = seasonality["daily"],
+            interval_width = 0.95
+        )
 
-    plot_forecast(df_train, df_test, predicted, train_index, results_path)
+        model.fit(df_train)
+        predicted = model.predict(df_test)
+        
+        train = model.history
+        signature = infer_signature(train, predicted)
+        
+        mlflow.prophet.log_model(model, artifact_path=ARTIFACT_PATH, signature=signature) # or signature=False, input_example= df_train
+
+        metric_keys = ["mse", "rmse", "mae", "mape", "mdape", "smape", "coverage"]
+        metrics_raw = cross_validation(
+            model=model,
+            horizon = "180 days",
+            period = "90 days",
+            initial = "500 days",
+            parallel="threads",
+            disable_tqdm=True,
+        )
+        cv_metrics = performance_metrics(metrics_raw)
+        metrics = {k: cv_metrics[k].mean() for k in metric_keys}
+    
+        params = extract_params(model)
+        mlflow.log_params(params)
+        mlflow.log_metrics(metrics)
+
+        plot_forecast(df_train, df_test, predicted, train_index, results_path)
 
 
 if __name__ == "__main__":

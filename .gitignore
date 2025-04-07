@@ -2,3 +2,4 @@ mlruns
 data
 train/.venv
 .vscode
+train/mlartifacts
