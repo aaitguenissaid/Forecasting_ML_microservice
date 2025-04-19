@@ -3,3 +3,5 @@ data
 train/.venv
 .vscode
 mlartifacts
+models
+__pycache__
