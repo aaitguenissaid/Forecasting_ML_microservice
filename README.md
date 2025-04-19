@@ -9,3 +9,10 @@ mlflow ui
 ## in  a separate terminal  
 source .venv/bin/activate
 uv run train_forecasting_basic.py 
+
+## to serve the model:
+cd serve
+uv sync
+uv venv
+source .venv/bin/activate
+uvicorn app:app (this tag --reload can be used for developement.)
