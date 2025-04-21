@@ -1,42 +1,17 @@
 import os
 import logging
 from pathlib import Path
-import kaggle
 import pandas as pd
-from prophet import Prophet, serialize
+from prophet import Prophet
 from sklearn.metrics import (mean_absolute_error, 
                              mean_squared_error, 
                              mean_absolute_percentage_error, 
                              median_absolute_error)
-from statsmodels.tsa.seasonal import seasonal_decompose, DecomposeResult
-import matplotlib.pyplot as plt
 import mlflow
 from mlflow import MlflowClient
 import ray 
 from tqdm import tqdm
-from config.paths import RESULTS_DIR, MODEL_DIR, DATA_DIR, TRAIN_FILE, TRACKING_URI, get_model_name, get_model_path, get_artifact_path, get_model_uri
-
-# Constants
-FIGSIZE = (15, 7)
-
-# config kaggle json and download the dataset.
-def download_kaggle_dataset(data_dir: str, kaggle_dataset: str = "pratyushakar/rossmann-store-sales") -> None:
-    data_path = Path(data_dir)
-    required_files = ["train.csv", "test.csv", "store.csv"]
-    missing_files = [f for f in required_files if not (data_path / f).is_file()]
-
-    if missing_files:
-        if len(missing_files) == len(required_files):
-            logging.info("No dataset files found. Downloading full dataset...")
-        else:
-            logging.info(f"Partial dataset found. Missing files: {missing_files}. Downloading full dataset...")
-
-        kaggle.api.dataset_download_files(
-            kaggle_dataset, path=str(data_path), unzip=True, quiet=False
-        )
-        logging.info("Download complete.")
-    else:
-        logging.info("All required dataset files are present. Skipping download.")
+from config.config import RESULTS_DIR, MODEL_DIR, DATA_DIR, TRAIN_FILE, TRACKING_URI, LOG_FORMAT, get_model_name, get_model_path, get_artifact_path, get_model_uri
 
 def prep_store_data(df: pd.DataFrame, store_id: int = 4, store_open: int = 1) -> pd.DataFrame:
     df["Date"] = pd.to_datetime(df["Date"])
@@ -51,98 +26,6 @@ def train_test_split(df: pd.DataFrame, train_fraction: float) -> tuple[pd.DataFr
     df_train = df.copy().iloc[0:train_index]
     df_test = df.copy().iloc[train_index:]
     return df_train, df_test, train_index
-
-def get_var_name(var, namespace) -> str:
-    return [name for name in namespace if namespace[name] is var][0]
-
-
-def df_date_range_and_period(df: pd.DataFrame) -> int:
-    var_name = get_var_name(df, locals())
-    logging.info(f"{var_name}:")
-    logging.info(f"Data range: {df['ds'].min().strftime('%Y-%m-%d')} -> {df['ds'].max().strftime('%Y-%m-%d')}")
-    period = (df['ds'].max() - df['ds'].min()).days + 1
-    logging.info(f"Total days: {period}\n")
-    return period
-
-def plot_forecast(df_train: pd.DataFrame, df_test: pd.DataFrame, predicted: pd.DataFrame, train_index: int, results_path: str) -> None:
-    fig, ax = plt.subplots(figsize=FIGSIZE)
-    df_test.plot(
-        x="ds",
-        y="y",
-        ax=ax,
-        label="Truth",
-        linewidth=1,
-        markersize=5,
-        color="tab:blue",
-        alpha=0.9,
-        marker="o"
-    )
-    predicted.plot(
-        x="ds",
-        y="yhat",
-        ax=ax,
-        label="Prediction + 95% CI",
-        linewidth=2,
-        markersize=5,
-        color="red"
-    )
-    ax.fill_between(
-        x=predicted["ds"],
-        y1=predicted["yhat_upper"],
-        y2=predicted["yhat_lower"],
-        alpha=0.15,
-        color="red"
-    )
-    df_train.iloc[train_index-100:].plot(
-        x="ds",
-        y="y",
-        ax=ax,
-        color='tab:blue',
-        label="_nolegend_",
-        alpha=0.5,
-        marker="o",
-    )
-    
-    yticks = plt.gca().get_yticks()
-    ax.set_yticks(yticks)
-    ax.set_yticklabels(["{:,.0f}".format(x) for x in yticks])
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Sales")
-    plt.tight_layout()
-    plt.savefig(os.path.join(results_path, "store_data_forecast.png"))
-
-def plot_results(model: Prophet, forecast_prophet: pd.DataFrame, df_test: pd.DataFrame, future_period: int , store_id: int) -> None:
-    # plot the time series 
-    forecast_plot = model.plot(forecast_prophet, figsize=FIGSIZE)
-
-    # add a vertical line at the end of the training period
-    axes = forecast_plot.gca()
-    last_training_date = forecast_prophet['ds'].iloc[-future_period]
-    axes.axvline(x=last_training_date, color='red', linestyle='--', label='Training End')
-    plt.title(f"Daily sales of store id: {store_id}")
-    # plot true test data for the period after the red line
-    plt.plot(df_test['ds'], df_test['y'],'ro', markersize=3, label='True Test Data')
-
-    # show the legend to distinguish between the lines
-    plt.legend()
-
-def plot_seasonal_decompose(decompose : DecomposeResult, plot: bool = True) -> None:
-    if(plot):
-        fig = decompose.plot()
-        fig.set_size_inches(FIGSIZE)
-        fig.tight_layout()
-        plt.show()
-    else:
-        logging.INFO("plot_seasonal_decompose deactivated")
-
-def plot_df(df: pd.DataFrame) -> None:
-    ax = df.set_index('ds').plot(figsize=FIGSIZE)
-    ax.set_xlabel('Date')
-    plt.show()
-
-
-def extract_params(model) -> dict:
-    return {attr: getattr(model, attr) for attr in serialize.SIMPLE_ATTRIBUTES}
 
 def define_model(seasonality: dict, interval_width: float = 0.95) -> Prophet:
     model = Prophet(
@@ -178,25 +61,9 @@ def prep_train_predict(
     return model, df_predicted, df_train, df_test, train_index
 
 
-def assign_alias_to_stage(client, model_name, alias, version):
-    """
-    Assign an alias to the latest version of a registered model within a specified stage.
-
-    :param model_name: The name of the registered model.
-    :param stage: The stage of the model version for which the alias is to be assigned. Can be
-                "Production", "Staging", "Archived", or "None".
-    :param alias: The alias to assign to the model version.
-    :return: None
-    """
-    # latest_mv = client.get_latest_versions(model_name, stages=[stage])[0]
-    client.set_registered_model_alias(model_name, alias, version)
-
-
 def main():
     Path(RESULTS_DIR).mkdir(exist_ok=True)
-    kaggle_dataset = "pratyushakar/rossmann-store-sales"
-    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    logging.basicConfig(format=log_format, level=logging.INFO)
+    logging.basicConfig(format=LOG_FORMAT, level=logging.INFO)
     
     mlflow.set_tracking_uri(TRACKING_URI)
     mlflow.set_experiment("prophet_models_14042025")
@@ -204,10 +71,9 @@ def main():
     client = MlflowClient(tracking_uri=TRACKING_URI)
     logging.info("Defined MLflowClient and set tracking URI.")
 
-    download_kaggle_dataset(DATA_DIR, kaggle_dataset)
     df = pd.read_csv(TRAIN_FILE)
 
-    store_ids = df['Store'].unique()
+    store_ids = df['Store'].unique()[:10]
 
     ray.init(num_cpus=4, include_dashboard=True)
     df_id = ray.put(df)

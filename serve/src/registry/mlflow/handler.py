@@ -3,7 +3,8 @@ from mlflow.client import MlflowClient
 from mlflow.pyfunc import PyFuncModel
 from pprint import pprint
 from helpers.requests import get_latest_model_version_from_folder
-from helpers.paths import get_model_name, get_model_path, MODEL_DIR, TRACKING_URI
+from config.config import get_model_name, get_model_path, MODEL_DIR, TRACKING_URI
+
 class MLFlowHandler:
     def __init__(self) -> None:
         self.client = MlflowClient(tracking_uri=TRACKING_URI)

@@ -29,8 +29,6 @@ def create_forecast_index(begin_date: str = None, end_date: str = None) -> pd.Da
 
     return pd.DataFrame({'ds': forecast_index})
 
-
-
 def get_latest_model_version_from_folder(model_registry_path, model_name) -> pd.DataFrame:
     model_path = os.path.join(model_registry_path, model_name)
 
@@ -50,7 +48,6 @@ def get_latest_model_version_from_folder(model_registry_path, model_name) -> pd.
     latest_version = max(int(v) for v in version_folders)
     return latest_version
 
-
 def get_production_model(store_id : str) -> PyFuncModel:
     model_name = get_model_name(store_id)
     # Retrieve the latest version of the model
@@ -59,7 +56,6 @@ def get_production_model(store_id : str) -> PyFuncModel:
     print("model_name", model_name)
     model = mlflow.prophet.load_model(model_uri=f"models/{model_name}/{latest_versions}")
     return model
-
 
 for store_id in ["1", "5", "4", "10"]:
     model = get_production_model(store_id)
