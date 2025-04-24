@@ -1,8 +1,9 @@
+import os
 from pathlib import Path
 
 # Constants
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-TRACKING_URI = "http://127.0.0.1:5000"
+TRACKING_URI = os.getenv("TRACKING_URI", "http://0.0.0.0:5000")
 MODEL_BASE_NAME = f"prophet-retail-forecaster-store"
 
 # Paths

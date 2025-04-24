@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      containers:
+      - name: mlflow
+        image: ghcr.io/mlflow/mlflow:v2.21.3
+        command: ["mlflow"]
+        args: ["server", "--host", "0.0.0.0"]
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+        - name: mlruns-volume
+          mountPath: /mlruns
+        - name: mlartifacts-volume
+          mountPath: /mlartifacts
+      volumes:
+      - name: mlruns-volume
+        hostPath:
+          path: /mlruns
+          type: Directory
+      - name: mlartifacts-volume
+        hostPath:
+          path: /mlartifacts
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow-service
+spec:
+  selector:
+    app: mlflow
+  ports:
+  - protocol: TCP
+    port: 5000
+    targetPort: 5000
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fast-api-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fast-api
+  template:
+    metadata:
+      labels:
+        app: fast-api
+    spec:
+      containers:
+      - name: fast-api
+        image: custom-forecast-service:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: model-volume
+          mountPath: /app/models
+        env:
+        - name: TRACKING_URI
+          value: "http://mlflow-service:5000"
+      volumes:
+      - name: model-volume
+        hostPath:
+          path: /app/models
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fast-api-service
+spec:
+  selector:
+    app: fast-api
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000
+  type: LoadBalancer

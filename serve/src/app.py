@@ -1,16 +1,17 @@
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+import pandas as pd
+from pydantic import BaseModel
+from config.config import LOG_FORMAT
 from registry.mlflow.handler import MLFlowHandler
 from mlflow.pyfunc import PyFuncModel
-from helpers.requests import ForecastRequest, create_forecast_index
+from helpers.requests import ForecastRequestDays, ForecastRequestInterval, create_forecast_index_days, create_forecast_index_interval
 from helpers.paths import get_model_name
-from typing import List
+from typing import Any, Callable, List
 import os
 
-
-log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-logging.basicConfig(format=log_format, level=logging.INFO)
+logging.basicConfig(format=LOG_FORMAT, level=logging.INFO)
 
 #TODO replace global variables with redis or memcache to avoid race conditions.
 handlers = {}
@@ -53,19 +54,18 @@ async def health_check() -> dict:
 async def get_model(store_id: str) -> PyFuncModel:
     global handlers
     global models
-    store_id_int = int(store_id)
     model_name = get_model_name(store_id)
     if model_name not in models:
         models[model_name] = handlers['mlflow'].get_production_model(store_id=store_id)
         logging.info(f"Loaded model for store {store_id}")
     return models[model_name]
 
-@app.post("/forecast/", status_code=200)
-async def return_forecast(forecast_request: List[ForecastRequest]) -> List[dict]:
+async def _generate_forecast(items: List[BaseModel], create_index: Callable[[Any], pd.DataFrame]) -> List[dict]:
     forecasts = []
-    for item in forecast_request:
+    print()
+    for item in items:
         model = await get_model(item.store_id)
-        forecast_input = create_forecast_index(begin_date=item.begin_date, end_date=item.end_date)
+        forecast_input = create_index(item)
         prediction = model.predict(forecast_input)[['ds', 'yhat']]
         prediction = prediction.rename(columns={'ds': 'timestamp', 'yhat': 'value'})
         prediction['value'] = prediction['value'].astype(int)
@@ -74,3 +74,17 @@ async def return_forecast(forecast_request: List[ForecastRequest]) -> List[dict]
             'forecast': prediction.to_dict('records')
         })
     return forecasts
+
+@app.post("/forecast_interval/", status_code=200)
+async def return_forecast_interval(forecast_request: List[ForecastRequestInterval]) -> List[dict]:
+    return await _generate_forecast(
+        forecast_request,
+        lambda item: create_forecast_index_interval(begin_date=item.begin_date, end_date=item.end_date)
+    )
+
+@app.post("/forecast_days/", status_code=200)
+async def return_forecast_days(forecast_request: ForecastRequestDays) -> List[dict]:
+    return await _generate_forecast(
+        [forecast_request],
+        lambda item: create_forecast_index_days(days=item.days)
+    )
