@@ -1,4 +1,4 @@
-
+import os
 import logging
 from matplotlib import pyplot as plt
 import pandas as pd
@@ -8,6 +8,10 @@ from statsmodels.tsa.seasonal import seasonal_decompose, DecomposeResult
 FIGSIZE = (15, 7)
 
 def plot_forecast(df_train: pd.DataFrame, df_test: pd.DataFrame, predicted: pd.DataFrame, train_index: int, results_path: str) -> None:
+    df_test["ds"] = df_test["ds"].astype(str)
+    predicted["ds"] = predicted["ds"].astype(str)
+    df_train["ds"] = df_train["ds"].astype(str)
+
     fig, ax = plt.subplots(figsize=FIGSIZE)
     df_test.plot(
         x="ds",
@@ -53,21 +57,22 @@ def plot_forecast(df_train: pd.DataFrame, df_test: pd.DataFrame, predicted: pd.D
     ax.set_ylabel("Sales")
     plt.tight_layout()
     plt.savefig(os.path.join(results_path, "store_data_forecast.png"))
+    plt.close()
 
-def plot_results(model: Prophet, forecast_prophet: pd.DataFrame, df_test: pd.DataFrame, future_period: int , store_id: int) -> None:
-    # plot the time series 
+def plot_results(model: Prophet, forecast_prophet: pd.DataFrame, df_test: pd.DataFrame, future_period: int, store_id: int) -> None:
+    # Convert 'ds' column to Python datetime objects for compatibility with matplotlib
+    df_test["ds"] = pd.to_datetime(df_test["ds"])
+    forecast_prophet["ds"] = pd.to_datetime(forecast_prophet["ds"])
+
     forecast_plot = model.plot(forecast_prophet, figsize=FIGSIZE)
 
-    # add a vertical line at the end of the training period
     axes = forecast_plot.gca()
     last_training_date = forecast_prophet['ds'].iloc[-future_period]
     axes.axvline(x=last_training_date, color='red', linestyle='--', label='Training End')
     plt.title(f"Daily sales of store id: {store_id}")
-    # plot true test data for the period after the red line
-    plt.plot(df_test['ds'], df_test['y'],'ro', markersize=3, label='True Test Data')
-
-    # show the legend to distinguish between the lines
+    plt.plot(df_test['ds'], df_test['y'], 'ro', markersize=3, label='True Test Data')
     plt.legend()
+    plt.show()
 
 def plot_seasonal_decompose(decompose : DecomposeResult, plot: bool = True) -> None:
     if(plot):
