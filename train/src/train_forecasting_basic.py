@@ -11,11 +11,11 @@ import mlflow
 from mlflow import MlflowClient
 import ray 
 from tqdm import tqdm
-from config.config import RESULTS_DIR, MODEL_DIR, DATA_DIR, TRAIN_FILE, TRACKING_URI, LOG_FORMAT, get_model_name, get_model_path, get_artifact_path, get_model_uri
+from config.config import RESULTS_DIR, MODEL_DIR, DATA_DIR, TRAIN_FILE, TRACKING_URI, LOG_FORMAT, get_model_id, get_model_name, get_model_path, get_artifact_path, get_model_uri
 
-def prep_store_data(df: pd.DataFrame, store_id: int = 4, store_open: int = 1) -> pd.DataFrame:
+def prep_store_data(df: pd.DataFrame, store_id: str = 4, store_open: int = 1) -> pd.DataFrame:
     df["Date"] = pd.to_datetime(df["Date"])
-    df_store = df[(df["Store"] == store_id ) & (df["Open"] == store_open)].reset_index(drop=True)
+    df_store = df[(df["Store"] == int(store_id) ) & (df["Open"] == store_open)].reset_index(drop=True)
     return df_store.sort_values("Date", ascending=True)
 
 def rename_cols(df: pd.DataFrame, feature: str) -> None:
@@ -47,7 +47,7 @@ def predict(model: Prophet, df_test:pd.DataFrame) -> pd.DataFrame:
 @ray.remote(num_returns=5)
 def prep_train_predict(
     df: pd.DataFrame,
-    store_id: int,
+    store_id: str,
     store_open: int=1,
     train_fraction: float=2/3,
     seasonality: dict={'yearly': True, 'weekly': True, 'daily': False}
@@ -71,10 +71,9 @@ def main():
     client = MlflowClient(tracking_uri=TRACKING_URI)
     logging.info("Defined MLflowClient and set tracking URI.")
 
-    df = pd.read_csv(TRAIN_FILE)
-
-    store_ids = df['Store'].unique()[:10]
-
+    df = pd.read_csv(TRAIN_FILE, dtype={"StateHoliday": str})
+    
+    store_ids = df['Store'].unique().astype(str).tolist()
     ray.init(num_cpus=4, include_dashboard=True)
     df_id = ray.put(df)
 
@@ -111,7 +110,7 @@ def main():
             df_yhat = df_pred['yhat']
             model_name = get_model_name(store_id)
             ARTIFACT_PATH = get_artifact_path(store_id)
-            with mlflow.start_run(run_name=f"m-store-{store_id:04}", nested=True) as sub_run:
+            with mlflow.start_run(run_name=f"m-store-{get_model_id(store_id)}", nested=True) as sub_run:
                 mlflow.prophet.log_model(
                     model, 
                     artifact_path=ARTIFACT_PATH, 
