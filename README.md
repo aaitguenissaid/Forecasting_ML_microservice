@@ -16,14 +16,21 @@ This project is a machine learning microservice for time-series forecasting. It 
 ## Setup
 ```bash
 git clone git@github.com:aaitguenissaid/Forecasting_ML_microservice.git
-cd Forecasting_ML_microservice/train/
-uv sync
-uv venv
-source .venv/bin/activate
-mlflow ui
+cd Forecasting_ML_microservice/
+export PYTHONPATH="$(pwd):$PYTHONPATH"
 ```
 
 ## Usage
+### Download Datasets
+```bash
+cd download_datasets
+uv sync
+uv venv
+source .venv/bin/activate
+mlflow ui --host 0.0.0.0 --port 5000 &
+python main.py
+```
+
 ### Training
 ```bash
 # In a separate terminal
@@ -34,18 +41,30 @@ uv run train_forecasting_basic.py
 
 ### Serving the Model
 ```bash
-export PYTHONPATH=$(pwd)/serve/src:$(pwd)
 cd serve
 uv sync
 uv venv
 source .venv/bin/activate
-uvicorn src.app:app --reload
+mlflow ui --host 0.0.0.0 --port 5000 &
+python main.py  #or: cd src && uvicorn app:app --reload
 ```
 
-### Running with Docker
+### Serving the Model with Docker
 ```bash
+cd train 
+mlflow ui --host 0.0.0.0 --port 5000 &
+cd ..
 sudo docker build -t custom-forecast-service:latest -f serve/Dockerfile .
-sudo docker run -e TRACKING_URI=http://172.17.0.1:5000 -p 8000:8000 -v "$(pwd)/models:/app/models" custom-forecast-service:latest
+docker run -p 8000:8000 --add-host=host.docker.internal:host-gateway -e TRACKING_URI=http://host.docker.internal:5000 -v "$(pwd)/models:/app/models" custom-forecast-service:latest
+```
+
+### Serving the Model with Podman
+```bash
+cd train 
+mlflow ui --host 0.0.0.0 --port 5000 &
+cd ..
+podman build -t custom-forecast-service:latest -f serve/Dockerfile .
+podman run -p 8000:8000 -e TRACKING_URI=http://host.containers.internal:5000 -v "$(pwd)/models:/app/models" custom-forecast-service:latest
 ```
 
 ### Running with Minikube
@@ -61,6 +80,7 @@ kubectl apply -f serve/direct_kube_deploy.yaml
 minikube tunnel
 
 minikube service mlflow-service --url
+minikube service fast-api-service --url
 kubectl get svc
 kubectl get pods
 kubectl get deployments
