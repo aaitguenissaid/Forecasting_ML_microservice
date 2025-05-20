@@ -7,3 +7,6 @@ def main():
     
 if __name__ == "__main__":
     main()
+
+# TODO: remove main and useless files from the docker file. 
+# TODO: resolve the mlflow not showing the experiments issue in kube 
