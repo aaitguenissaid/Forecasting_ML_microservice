@@ -1,0 +1,37 @@
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.21.3
+    command:
+      - mlflow
+      - server
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "5000"
+    ports:
+      - "5000:5000"
+    volumes:
+      - "${PWD}/train/mlruns:/mlruns"
+      - "${PWD}/train/mlartifacts:/mlartifacts"
+    networks:
+      - ml-network
+
+  fast-api:
+    build:
+      context: ..                 
+      dockerfile: serve/Dockerfile
+    image: custom-forecast-service:latest
+    depends_on:
+      - mlflow
+    environment:
+      TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8000:8000"
+    volumes:
+      - "${PWD}/models:/app/models"
+    networks:
+      - ml-network
+
+networks:
+  ml-network:
+    driver: bridge

@@ -67,6 +67,12 @@ podman build -t custom-forecast-service:latest -f serve/Dockerfile .
 podman run -p 8000:8000 -e TRACKING_URI=http://host.containers.internal:5000 -v "$(pwd)/models:/app/models" custom-forecast-service:latest
 ```
 
+### Serving the Model with Docker Compose
+```bash
+docker compose -f serve/docker-compose.yml up --build -d
+docker compose -f serve/docker-compose.yml down
+```
+
 ### Running with Minikube
 ```bash
 docker build -t custom-forecast-service:latest -f serve/Dockerfile .
