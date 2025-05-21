@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: mlflow
-        image: ghcr.io/mlflow/mlflow:v2.21.3
+        image: ghcr.io/mlflow/mlflow:v2.22.0
         command: ["mlflow"]
         args: ["server", "--host", "0.0.0.0"]
         ports:

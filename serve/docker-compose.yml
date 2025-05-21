@@ -1,6 +1,6 @@
 services:
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.21.3
+    image: ghcr.io/mlflow/mlflow:v2.22.0
     command:
       - mlflow
       - server
