@@ -1,10 +1,8 @@
 # Forecasting ML Microservice
 
-## Overview
 This project is a machine learning microservice for time-series forecasting. It uses Prophet models to forecast retail data and provides a REST API for serving predictions. The project supports training, serving, and deployment using Docker and Kubernetes.
 
 ## Table of Contents
-- [Overview](#overview)
 - [Setup](#setup)
 - [Usage](#usage)
 - [Deployment](#deployment)
