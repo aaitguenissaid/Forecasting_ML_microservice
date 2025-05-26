@@ -1,7 +1,5 @@
 # Forecasting ML Microservice
 
-![Build Status](https://github.com/aaitguenissaid/Forecasting_ML_microservice/actions/workflows/ci.yml/badge.svg)
-
 ## Overview
 This project is a machine learning microservice for time-series forecasting. It uses Prophet models to forecast retail data and provides a REST API for serving predictions. The project supports training, serving, and deployment using Docker and Kubernetes.
 
